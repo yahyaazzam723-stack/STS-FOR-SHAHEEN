@@ -1,4 +1,4 @@
-    const getStorage = (key) => {
+const getStorage = (key) => {
         let val = localStorage.getItem(key);
         try { return JSON.parse(val) || []; } catch(e) { return []; }
     };
@@ -393,6 +393,13 @@
     let _loginCurrentEmail = '';
     let _registerCurrentEmail = '';
     let _registerPendingData = null; // { name, phone, address, email }
+    // [SEC-FIX-REGISTER-DATA-LOST] استعادة بيانات التسجيل المعلَّقة من localStorage كنسخة احتياطية
+    function _restoreRegisterPendingData() {
+        try {
+            const _raw = localStorage.getItem('shahen_register_pending');
+            return _raw ? JSON.parse(_raw) : null;
+        } catch(_e) { return null; }
+    }
     const _AUTH_SEND_COOLDOWN_MS = 45000;
     const _AUTH_MAX_VERIFY_ATTEMPTS = 5;
     const _AUTH_LOCK_MS = 60000;
@@ -622,6 +629,12 @@
 
             _registerCurrentEmail = email;
             _registerPendingData = { name: n, phone: ph, address: addr, email };
+            // [SEC-FIX-REGISTER-DATA-LOST] السبب الجذري لخطأ "null value in column name":
+            // هذا المتغيّر كان يعيش بالذاكرة فقط. لو المستخدم غادر التطبيق ليفحص بريده (طبيعي جداً
+            // أثناء انتظار رمز OTP) وعلّق المتصفح/النظام تبويب التطبيق بالخلفية لتوفير الذاكرة، يُصفَّر
+            // هذا المتغيّر، فتصل بيانات فارغة (name/phone/address = undefined) عند إنشاء الصف لاحقاً.
+            // نحفظه احتياطياً بـ localStorage ليصمد عبر إعادة تحميل الصفحة أو تعليق التبويب.
+            try { localStorage.setItem('shahen_register_pending', JSON.stringify(_registerPendingData)); } catch(_persistErr) {}
             _authVerifyAttempts = 0; _authLockUntil = 0;
             document.getElementById('register-sent-to-email').innerText = email;
             document.getElementById('register-otp-status-msg').innerText = '';
@@ -687,7 +700,14 @@
             // قد يفشل بطرق غير متوقعة، نحذف ببساطة أي صف موجود بنفس البريد (مهما كان عدده أو معرّفه)
             // أولاً وبلا أي شرط، ثم ننشئ صفاً واحداً جديداً نظيفاً مباشرة. هذا يضمن رياضياً عدم بقاء
             // أي صف مكرَّر بنفس البريد إطلاقاً، ويزيل احتمال تعارض المفتاح الأساسي نهائياً.
-            const p = _registerPendingData || {};
+            const p = _registerPendingData || _restoreRegisterPendingData();
+            // [SEC-FIX-REGISTER-DATA-LOST] حارس أخير: لو ما زالت البيانات غير متوفرة (لا بالذاكرة ولا
+            // بـ localStorage)، نوقف قبل الإدراج بقيم فارغة بدل ما نرسل صفاً ناقصاً يرفضه القيد NOT NULL
+            // برسالة خطأ غير مفهومة للمستخدم — ونطلب منه فقط إعادة إدخال بياناته من جديد بوضوح.
+            if (!p || !p.name) {
+                document.getElementById('register-otp-status-msg').innerText = '⚠️ فُقدت بيانات التسجيل (ربما بسبب تعليق التطبيق أثناء انتظارك)، يرجى تعبئة النموذج والمحاولة من جديد';
+                return;
+            }
             const _custPayload = {
                 email: _registerCurrentEmail, name: p.name, phone: p.phone, address: p.address,
                 points: 0, balance: 0, is_activated: true
@@ -701,6 +721,9 @@
             document.getElementById('register-otp-status-msg').innerText = '✅ تم تفعيل حسابك بنجاح';
             currentUser = { uid: data.user.id, name: p.name, email: p.email || data.user.email, phone: p.phone, address: p.address, points: 0, balance: 0 };
             localStorage.setItem('shahen_user', JSON.stringify(currentUser));
+            // [SEC-FIX-REGISTER-DATA-LOST] تنظيف النسخة الاحتياطية بعد نجاح الاستخدام لمنع تسرّب بيانات
+            // تسجيل قديمة لمحاولة تسجيل مستقبلية مختلفة
+            try { localStorage.removeItem('shahen_register_pending'); } catch(_e) {}
             showNotify("🎉 تم إنشاء حسابك وتفعيله بنجاح");
             _enterAppAfterLogin();
         } catch(_e) {
@@ -8986,4 +9009,3 @@
             }
         });
     });
-
