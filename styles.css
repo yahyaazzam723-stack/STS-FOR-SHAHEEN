@@ -1,4 +1,4 @@
-        :root { --gold: #d4af37; --purple: #1a051a; --glass: rgba(30, 10, 30, 0.95); --bg-body: #000; --text-main: #fff; --card-bg: rgba(30, 10, 30, 0.95); }
+:root { --gold: #d4af37; --purple: #1a051a; --glass: rgba(30, 10, 30, 0.95); --bg-body: #000; --text-main: #fff; --card-bg: rgba(30, 10, 30, 0.95); }
         /* أنماط الوضع الصباحي */
         .light-mode { --purple: #f4f4f9; --glass: rgba(255, 255, 255, 0.9); --bg-body: #ffffff; --text-main: #1a051a; --card-bg: #fff; }
         .light-mode .app-shell { background: var(--purple); border-color: var(--gold); }
